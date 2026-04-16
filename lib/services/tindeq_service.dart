@@ -87,6 +87,8 @@ class TindeqService {
     _setState(TindeqConnectionState.scanning);
     _log('Scanning for Progressor...');
 
+    BluetoothDevice? foundDevice;
+
     try {
       // Listen for scan results
       final completer = Completer<BluetoothDevice>();
@@ -106,7 +108,7 @@ class TindeqService {
         timeout: const Duration(seconds: 15),
       );
 
-      _device = await completer.future.timeout(
+      foundDevice = await completer.future.timeout(
         const Duration(seconds: 15),
         onTimeout: () => throw TimeoutException('No Progressor found'),
       );
@@ -114,65 +116,92 @@ class TindeqService {
       await FlutterBluePlus.stopScan();
       scanSub.cancel();
 
-      _log('Found ${_device!.platformName}. Connecting...');
+      _log('Found ${foundDevice.platformName}.');
+    } catch (e) {
+      _log('Scan error: $e');
+      _setState(TindeqConnectionState.disconnected);
+      return;
+    }
+
+    // Retry the full connect+setup sequence up to 3 times
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      _log('Connection attempt $attempt/3...');
       _setState(TindeqConnectionState.connecting);
 
-      await _device!.connect(
-        timeout: const Duration(seconds: 10),
-        autoConnect: false,
-      );
-
-      // Listen for disconnection
-      _connectionSub = _device!.connectionState.listen((state) {
-        if (state == BluetoothConnectionState.disconnected) {
-          _log('Device disconnected.');
-          _cleanup();
-          _setState(TindeqConnectionState.disconnected);
-        }
-      });
-
-      // Allow the connection to stabilize before service discovery
-      _log('Connected. Requesting MTU...');
-      await _device!.requestMtu(512);
-      await Future.delayed(const Duration(milliseconds: 1000));
-
-      _log('Discovering services...');
-      final services = await _device!.discoverServices();
-
-      // Find Progressor service
-      final svc = services.firstWhere(
-        (s) => s.serviceUuid == TindeqUuids.service,
-        orElse: () => throw Exception('Progressor service not found'),
-      );
-
-      _dataChar = svc.characteristics.firstWhere(
-        (c) => c.characteristicUuid == TindeqUuids.data,
-      );
-      _ctrlChar = svc.characteristics.firstWhere(
-        (c) => c.characteristicUuid == TindeqUuids.controlPoint,
-      );
-
-      // Enable notifications with retry — Android GATT can be flaky
-      _log('Enabling notifications...');
-      for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        // Clean up any prior connection state
         try {
-          await Future.delayed(const Duration(milliseconds: 500));
-          await _dataChar!.setNotifyValue(true);
-          break;
-        } catch (e) {
-          _log('Notify attempt $attempt failed: $e');
-          if (attempt == 3) rethrow;
-          await Future.delayed(Duration(milliseconds: 500 * attempt));
+          await foundDevice.disconnect();
+        } catch (_) {}
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        await foundDevice.connect(
+          timeout: const Duration(seconds: 10),
+          autoConnect: false,
+        );
+        _device = foundDevice;
+
+        // Let the connection stabilize
+        _log('Connected. Stabilizing...');
+        await Future.delayed(const Duration(milliseconds: 2000));
+
+        // Request larger MTU for notification payloads
+        try {
+          await _device!.requestMtu(512);
+        } catch (_) {}
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        _log('Discovering services...');
+        final services = await _device!.discoverServices();
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        // Find Progressor service
+        final svc = services.firstWhere(
+          (s) => s.serviceUuid == TindeqUuids.service,
+          orElse: () => throw Exception('Progressor service not found'),
+        );
+
+        _dataChar = svc.characteristics.firstWhere(
+          (c) => c.characteristicUuid == TindeqUuids.data,
+        );
+        _ctrlChar = svc.characteristics.firstWhere(
+          (c) => c.characteristicUuid == TindeqUuids.controlPoint,
+        );
+
+        // Enable notifications
+        _log('Enabling notifications...');
+        await _dataChar!.setNotifyValue(true);
+        _notifySub = _dataChar!.onValueReceived.listen(_onDataReceived);
+
+        // Listen for disconnection
+        _connectionSub = _device!.connectionState.listen((state) {
+          if (state == BluetoothConnectionState.disconnected) {
+            _log('Device disconnected.');
+            _cleanup();
+            _setState(TindeqConnectionState.disconnected);
+          }
+        });
+
+        _setState(TindeqConnectionState.connected);
+        _log('Ready!');
+        return; // success
+      } catch (e) {
+        _log('Attempt $attempt failed: $e');
+        _cleanup();
+        try {
+          await foundDevice.disconnect();
+        } catch (_) {}
+
+        if (attempt < 3) {
+          final waitSec = attempt * 2;
+          _log('Retrying in ${waitSec}s...');
+          await Future.delayed(Duration(seconds: waitSec));
         }
       }
-      _notifySub = _dataChar!.onValueReceived.listen(_onDataReceived);
-
-      _setState(TindeqConnectionState.connected);
-      _log('Ready. Notifications enabled.');
-    } catch (e) {
-      _log('Error: $e');
-      await disconnect();
     }
+
+    _log('Failed to connect after 3 attempts.');
+    _setState(TindeqConnectionState.disconnected);
   }
 
   /// Parse incoming BLE notification data from the Progressor.
