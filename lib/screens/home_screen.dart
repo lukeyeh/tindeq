@@ -351,28 +351,26 @@ class _HomeScreenState extends State<HomeScreen> {
           // Connect / Disconnect
           Expanded(
             child: _isConnected
-                ? OutlinedButton.icon(
+                ? OutlinedButton(
                     onPressed: _tindeq.disconnect,
-                    icon: const Icon(Icons.bluetooth_disabled),
-                    label: const Text('Disconnect'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.redAccent,
                       side: const BorderSide(color: Colors.redAccent),
                     ),
+                    child: const Text('Disconnect'),
                   )
-                : ElevatedButton.icon(
+                : ElevatedButton(
                     onPressed: _connectionState ==
                                 TindeqConnectionState.scanning ||
                             _connectionState ==
                                 TindeqConnectionState.connecting
                         ? null
                         : _tindeq.scanAndConnect,
-                    icon: const Icon(Icons.bluetooth_searching),
-                    label: const Text('Connect'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.tealAccent,
                       foregroundColor: Colors.black,
                     ),
+                    child: const Text('Connect'),
                   ),
           ),
           const SizedBox(width: 8),
@@ -404,17 +402,6 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: _isConnected ? _tindeq.tare : null,
             icon: const Icon(Icons.restart_alt),
             tooltip: 'Tare',
-            style: IconButton.styleFrom(
-              foregroundColor: Colors.white70,
-              backgroundColor: Colors.white10,
-            ),
-          ),
-          const SizedBox(width: 4),
-          // Battery
-          IconButton(
-            onPressed: _isConnected ? _tindeq.requestBattery : null,
-            icon: const Icon(Icons.battery_unknown),
-            tooltip: 'Battery',
             style: IconButton.styleFrom(
               foregroundColor: Colors.white70,
               backgroundColor: Colors.white10,
