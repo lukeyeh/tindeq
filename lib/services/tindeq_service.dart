@@ -117,7 +117,10 @@ class TindeqService {
       _log('Found ${_device!.platformName}. Connecting...');
       _setState(TindeqConnectionState.connecting);
 
-      await _device!.connect(timeout: const Duration(seconds: 10));
+      await _device!.connect(
+        timeout: const Duration(seconds: 10),
+        autoConnect: false,
+      );
 
       // Listen for disconnection
       _connectionSub = _device!.connectionState.listen((state) {
@@ -128,7 +131,12 @@ class TindeqService {
         }
       });
 
-      _log('Connected. Discovering services...');
+      // Allow the connection to stabilize before service discovery
+      _log('Connected. Requesting MTU...');
+      await _device!.requestMtu(512);
+      await Future.delayed(const Duration(milliseconds: 1000));
+
+      _log('Discovering services...');
       final services = await _device!.discoverServices();
 
       // Find Progressor service
@@ -144,8 +152,19 @@ class TindeqService {
         (c) => c.characteristicUuid == TindeqUuids.controlPoint,
       );
 
-      // Enable notifications on the data characteristic
-      await _dataChar!.setNotifyValue(true);
+      // Enable notifications with retry — Android GATT can be flaky
+      _log('Enabling notifications...');
+      for (var attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await Future.delayed(const Duration(milliseconds: 500));
+          await _dataChar!.setNotifyValue(true);
+          break;
+        } catch (e) {
+          _log('Notify attempt $attempt failed: $e');
+          if (attempt == 3) rethrow;
+          await Future.delayed(Duration(milliseconds: 500 * attempt));
+        }
+      }
       _notifySub = _dataChar!.onValueReceived.listen(_onDataReceived);
 
       _setState(TindeqConnectionState.connected);
