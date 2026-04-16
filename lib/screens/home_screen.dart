@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:math';
 
 import 'package:fl_chart/fl_chart.dart';
@@ -18,10 +17,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final TindeqService _tindeq = TindeqService();
   final List<StreamSubscription> _subs = [];
-  final Queue<FlSpot> _chartData = Queue<FlSpot>();
-
-  static const int _maxChartPoints = 500;
-  static const double _chartWindowSeconds = 10.0;
+  final List<FlSpot> _chartData = [];
 
   double _currentLoad = 0.0;
   double _peakLoad = 0.0;
@@ -45,10 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _currentLoad = sample.weightKg;
       _elapsedSeconds = sample.timestamp.inMicroseconds / 1e6;
 
-      _chartData.addLast(FlSpot(_elapsedSeconds, sample.weightKg));
-      while (_chartData.length > _maxChartPoints) {
-        _chartData.removeFirst();
-      }
+      _chartData.add(FlSpot(_elapsedSeconds, sample.weightKg));
     });
   }
 
@@ -219,16 +212,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildChart() {
-    final spots = _chartData.toList();
+    final spots = _chartData;
 
     double minX = 0;
-    double maxX = _chartWindowSeconds;
+    double maxX = 10;
     if (spots.isNotEmpty) {
-      maxX = spots.last.x;
-      minX = max(0, maxX - _chartWindowSeconds);
+      minX = spots.first.x;
+      maxX = max(spots.last.x, minX + 5);
     }
 
-    // Compute a nice Y max
+    // Compute a nice Y max from all visible data
     double maxY = 10;
     for (final s in spots) {
       if (s.y > maxY) maxY = s.y;
