@@ -25,6 +25,9 @@ class _HomeScreenState extends State<HomeScreen> {
   TindeqConnectionState _connectionState = TindeqConnectionState.disconnected;
   final List<String> _logs = [];
   double _elapsedSeconds = 0.0;
+  bool _useLbs = false;
+
+  static const double _kgToLbs = 2.20462;
 
   @override
   void initState() {
@@ -85,6 +88,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool get _isMeasuring =>
       _connectionState == TindeqConnectionState.measuring;
 
+  double _convert(double kg) => _useLbs ? kg * _kgToLbs : kg;
+  String get _unit => _useLbs ? 'lbs' : 'kg';
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -118,9 +124,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildLoadDisplay() {
-    final loadColor = _currentLoad < 10
+    final displayLoad = _convert(_currentLoad);
+    final displayPeak = _convert(_peakLoad);
+    final loadColor = displayLoad.abs() < (_useLbs ? 22 : 10)
         ? Colors.greenAccent
-        : _currentLoad < 30
+        : displayLoad.abs() < (_useLbs ? 66 : 30)
             ? Colors.orangeAccent
             : Colors.redAccent;
 
@@ -131,7 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         children: [
           Text(
-            _currentLoad.toStringAsFixed(1),
+            displayLoad.toStringAsFixed(1),
             style: TextStyle(
               fontSize: 72,
               fontWeight: FontWeight.bold,
@@ -139,15 +147,27 @@ class _HomeScreenState extends State<HomeScreen> {
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
-          const Text(
-            'kg',
-            style: TextStyle(fontSize: 20, color: Colors.white54),
+          GestureDetector(
+            onTap: () => setState(() => _useLbs = !_useLbs),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white10,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '$_unit  ⇄',
+                style: const TextStyle(fontSize: 18, color: Colors.white54),
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _buildStatChip('Peak', '${_peakLoad.toStringAsFixed(1)} kg',
+              _buildStatChip(
+                  'Peak',
+                  '${displayPeak.toStringAsFixed(1)} $_unit',
                   Colors.orangeAccent),
               const SizedBox(width: 16),
               _buildStatChip(
@@ -212,7 +232,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildChart() {
-    final spots = _chartData;
+    final spots = _useLbs
+        ? _chartData.map((s) => FlSpot(s.x, s.y * _kgToLbs)).toList()
+        : _chartData;
 
     double minX = 0;
     double maxX = 10;
@@ -222,12 +244,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // Compute a nice Y max from all visible data
-    double maxY = 10;
+    final step = _useLbs ? 20.0 : 10.0;
+    double maxY = step;
     for (final s in spots) {
       if (s.y > maxY) maxY = s.y;
     }
-    maxY = ((maxY / 10).ceil() * 10).toDouble();
-    if (maxY < 10) maxY = 10;
+    maxY = ((maxY / step).ceil() * step).toDouble();
+    if (maxY < step) maxY = step;
 
     return Expanded(
       flex: 3,
