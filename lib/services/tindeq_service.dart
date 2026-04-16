@@ -290,6 +290,9 @@ class TindeqService {
     }
     _peakLoad = 0.0;
     _peakLoadController.add(0.0);
+    _log('Taring before measurement...');
+    await _sendCommand(TindeqCommands.tareScale);
+    await Future.delayed(const Duration(milliseconds: 500));
     _log('Starting measurement...');
     await _sendCommand(TindeqCommands.startWeightMeasurement);
     _setState(TindeqConnectionState.measuring);
