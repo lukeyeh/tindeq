@@ -150,14 +150,27 @@ class _HomeScreenState extends State<HomeScreen> {
           GestureDetector(
             onTap: () => setState(() => _useLbs = !_useLbs),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.white10,
-                borderRadius: BorderRadius.circular(12),
+                color: Colors.tealAccent.withAlpha(25),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.tealAccent.withAlpha(100)),
               ),
-              child: Text(
-                '$_unit  ⇄',
-                style: const TextStyle(fontSize: 18, color: Colors.white54),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.swap_horiz,
+                      size: 18, color: Colors.tealAccent),
+                  const SizedBox(width: 6),
+                  Text(
+                    _useLbs ? 'lbs' : 'kg',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      color: Colors.tealAccent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
