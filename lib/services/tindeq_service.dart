@@ -278,9 +278,13 @@ class TindeqService {
     }
   }
 
+  /// Commands are sent as 2-byte little-endian values per the Progressor protocol.
   Future<void> _sendCommand(int opcode) async {
     if (_ctrlChar == null) return;
-    await _ctrlChar!.write([opcode], withoutResponse: false);
+    await _ctrlChar!.write(
+      [opcode & 0xFF, (opcode >> 8) & 0xFF],
+      withoutResponse: false,
+    );
   }
 
   Future<void> startMeasurement() async {
@@ -290,12 +294,13 @@ class TindeqService {
     }
     _peakLoad = 0.0;
     _peakLoadController.add(0.0);
-    _log('Taring before measurement...');
-    await _sendCommand(TindeqCommands.tareScale);
-    await Future.delayed(const Duration(milliseconds: 500));
     _log('Starting measurement...');
     await _sendCommand(TindeqCommands.startWeightMeasurement);
     _setState(TindeqConnectionState.measuring);
+    // Tare after measurement starts so the device is actively reading
+    await Future.delayed(const Duration(milliseconds: 500));
+    _log('Taring...');
+    await _sendCommand(TindeqCommands.tareScale);
   }
 
   Future<void> stopMeasurement() async {
